@@ -9,8 +9,9 @@
 # LOOP - monitor market until buying a stock
 # load 30 min candles
 # perform general trend analysis
+
 # load 5 min candles
-# perform instant trend analysis
+# perform instant trend analysis (must match general trend analysis)
 # perform RSI analysis
 # perform stochastic analysis
 

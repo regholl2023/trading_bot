@@ -30,6 +30,7 @@ def clean_open_orders():
 
 # execute trading bot
 def main():
+
     # init logger
     init_logger()
 

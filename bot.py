@@ -29,6 +29,22 @@ def clean_open_orders(api):
     lg.info("Closing orders complete")
 
 
+# outputs true if asset is OK for trading
+def check_asset_ok(api, ticker):
+    try:
+        asset = api.get_asset(ticker)
+        if asset.tradable:
+            lg.info("Asset exists and tradable")
+            return True
+        else:
+            lg.info("Asset exists but not tradable")
+            return False
+    except Exception as e:
+        lg.error("Asset does not exist or irretrievable from Alpaca")
+        lg.error(str(e))
+        sys.exit()
+
+
 # execute trading bot
 def main():
     # authenticate for using alpaci api
@@ -48,10 +64,11 @@ def main():
     clean_open_orders(api)
 
     # get ticker
-    ticker = input("Which ticker would you like to use?")
-
+    # ticker = input("Which ticker would you like to use?")
+    ticker = "TSLA"
+    check_asset_ok(api=api, ticker=ticker)
     # run trading bot
-    trader = Trader()
+    trader = Trader(ticker, api)
     trader.run()
 
 

@@ -78,6 +78,7 @@ class Trader:
             else:
                 raise ValueError
         except Exception as e:
+            pdb.set_trace()
             lg.error(
                 "Invalid direction value used for determining take margin: % s",
                 direction,
@@ -86,7 +87,7 @@ class Trader:
 
     # Loads 'limit' 'timeframe' candlesticks by making call to alpaca data api
     # Returns result as a pandas DataFrame
-    def load_historical_data_alpaca(
+    def load_historical_data_alpaca_DEPRECATED(
         self, timeframe=TimeFrame(15, TimeFrameUnit.Minute), limit=3 * 24 * 4
     ):
         currentTime = datetime.now(pytz.timezone("US/Eastern"))
@@ -116,25 +117,30 @@ class Trader:
             sys.exit()
         return data
 
-    def get_open_positions(self, assetId):
-        # get open positions
-        # IN: assetId, a unique identifier for stock, (ticker not unique)
-        # OUT: True/False if open (bool)
-        positions = None  # get open positions from alpaca API TODO
-        for position in positions:
-            if position.symbol == assetId:
+    def cancel_pending_order(self):
+        for attempt in range(constants.maxAttemptsCancelPending):
+            try:
+                self.api.cancel_order(self.orderId)
+                lg.info("Order %s cancelled successfully", self.orderId)
                 return True
-            else:  # TODO -> is this correct?
-                return False
+            except Exception as e:
+                lg.error("The order could not be cancelled, retrying...")
+                time.sleep(constants.sleepTimeCancelPending)
+        lg.error("The order could not be cancelled, giving up.")
+        lg.error("Client Order ID: %s", self.orderId)
+        self.api.cancel_all_orders()
+        sys.exit()
 
-    def check_position(self, fastFalse=False):
+    def check_position(
+        self, fastFalse=False, maxAttempts=constants.maxAttemptsCheckPosition
+    ):
         # check whether position exists or not
         # IN: ticker, fastFalse (don't retry if not found)
         # OUT: boolean (True if order is there, False otws)
-        for attempt in range(constants.maxAttemptsCheckPosition):
+        for attempt in range(maxAttempts):
             try:
                 position = self.api.get_position(self.ticker)
-                currentPrice = position.current_price
+                currentPrice = float(position.current_price)
                 lg.info(
                     "The position was checked with current price: %.2f", currentPrice
                 )
@@ -143,6 +149,7 @@ class Trader:
                 if fastFalse:
                     lg.info("Position not found (good!)")
                     return False
+            if attempt != maxAttempts - 1:
                 lg.info("Position not found, waiting for it ...")
                 time.sleep(constants.sleepTimeCheckPosition)  # 5 seconds
         lg.info("Position not found for %s, not any more", self.ticker)
@@ -153,7 +160,7 @@ class Trader:
         # IN: assetPrice
         # OUT: number of shares
         try:
-            # get equity available from alpaca api TODO
+            # get equity available from alpaca api
             equity = float(self.api.get_account().equity)
             shares = min(equity, constants.maxSpendEquity) // assetPrice
             if equity - shares * assetPrice > 0:
@@ -173,17 +180,38 @@ class Trader:
         # IN: ticker/asset
         # OUT: current price
         asset = self.ticker
-        for attempt in range(constants.maxAttemptsCurrentPrice):
+        for attempt in range(constants.maxAttemptsPrice):
             try:
-                position = None  # get open positions from alpaca API TODO
-                currentPrice = position.current_price
+                # get open positions from alpaca API
+                position = self.api.get_position(self.ticker)
+                currentPrice = float(position.current_price)
                 lg.info(
                     "The position was checked with current price: %.2f", currentPrice
                 )
                 return currentPrice
             except:
                 lg.info("Position not found,cannot check price ...")
-                time.sleep(constants.sleepTimeCurrentPrice)  # 5 seconds
+                time.sleep(constants.sleeptimePrice)  # 5 seconds
+        lg.error("Position not found for %s, not any more", asset)
+        sys.exit()
+
+    def get_avg_entry_price(self):
+        # get current price of asset with a position open
+        # IN: ticker/asset
+        # OUT: current price
+        asset = self.ticker
+        for attempt in range(constants.maxAttemptsPrice):
+            try:
+                # get open positions from alpaca API
+                position = self.api.get_position(self.ticker)
+                currentPrice = float(position.avg_entry_price)
+                lg.info(
+                    "The position was checked with current price: %.2f", currentPrice
+                )
+                return currentPrice
+            except:
+                lg.info("Position not found,cannot check price ...")
+                time.sleep(constants.sleeptimePrice)  # 5 seconds
         lg.error("Position not found for %s, not any more", asset)
         sys.exit()
 
@@ -279,10 +307,6 @@ class Trader:
             # get 5 min candles from yahoo (~50 samples)
             data = self.load_historical_data_yahoo(interval="5m", period="1d")
             rsi = ti.rsi(data.Close.values, 14)[-1]  # using 14 sample window
-<<<<<<< HEAD
-=======
-            pdb.set_trace()
->>>>>>> 9c2b575834bd60dcff2620d27919dfdfdfb64013
             lg.info("RSI = %.2f", rsi)
             if trend == "long" and 50 < rsi and rsi < 80:
                 lg.info("Trend confirmed for %s: long", asset)
@@ -309,7 +333,7 @@ class Trader:
         lg.info("Stochastic analysis ...")
         asset = self.ticker
         for attempt in range(maxAttempts):
-            # get 5 min candles from alpaca API TODO
+            # get 5 min candles from alpaca API
             data = self.load_historical_data_yahoo(interval="5m", period="1d")
             stoch_k, stoch_d = ti.stoch(
                 data.High.values,
@@ -338,7 +362,7 @@ class Trader:
         # IN: trend
         # OUt: True if crossed, False otws
         lg.info("Checking stochastic crossing...")
-        data = None  # ask yahoo API for 5 min candles
+        # ask yahoo API for 5 min candles
         data = self.load_historical_data_yahoo(interval="5m", period="1d")
         stoch_k, stoch_d = ti.stoch(
             data.High.values,
@@ -362,13 +386,23 @@ class Trader:
             lg.info("Stochastic curves have not crossed")
             return False
 
-    def enter_position_mode(self, trend, retryInterval=20, maxAttempts=1440):
+    def enter_position_mode(
+        self,
+        trend,
+        retryInterval=constants.sleepTimeEnterPositionMode,
+        maxAttempts=constants.maxAttemptsEnterPositionMode,
+    ):
         # default params will stay in position for at most 8 hours (since 20 * 1440 seconds is 8 hrs)
         # check the conditions in parallel once inside the position, if any are true -> close
         asset = self.ticker
-        entryPrice = None  #  ask alpaca API for entry price TODO
+        #  ask alpaca API for entry price
+        entryPrice = self.get_avg_entry_price()
 
-        takeProfit = self.set_takeprofit(entryPrice, trend)
+        takeProfit = self.set_takeprofit(
+            entryPrice=entryPrice,
+            direction=trend,
+            takeProfitMargin=constants.takeProfitMargin,
+        )
         stopLoss = self.set_stoploss(entryPrice, trend)
 
         for attempt in range(maxAttempts):
@@ -404,15 +438,15 @@ class Trader:
                     currentPrice,
                 )
                 return False
-            elif self.check_stochastic_crossing(asset, trend):
+            elif self.check_stochastic_crossing(trend):
                 lg.info(
                     "Stochastic curves crossed. Current price is %.2f", currentPrice
                 )
                 return True
-            else:
+            elif attempt + 1 != maxAttempts:
                 lg.info("Waiting inside position, attempt#%d", attempt)
                 lg.info(
-                    "stop loss: %.2f|  $.2f  |%.2f :take profit",
+                    "stop loss: %.2f|  %.2f  |%.2f :take profit",
                     stopLoss,
                     currentPrice,
                     takeProfit,
@@ -424,10 +458,8 @@ class Trader:
 
         # check stochastic crossing
 
-    def submit_order(
-        self, type, trend, ticker, sharesQuantity, currentPrice, exit=False
-    ):
-        lg.info("Submitting %s order for %s" % (trend, ticker))
+    def submit_order(self, type, trend, sharesQuantity, currentPrice, exit=False):
+        lg.info("Submitting %s order for %s" % (trend, self.ticker))
 
         if trend == "long" and not exit:
             side = "buy"
@@ -451,7 +483,7 @@ class Trader:
                     side=side,
                     type=type,
                     time_in_force="gtc",
-                    limitPrice="limitPrice",
+                    limit_price=limitPrice,
                 )
             elif type == "market":
                 lg.info("Current price: %.2f", currentPrice)
@@ -483,7 +515,7 @@ class Trader:
             # ask broker/api if we have an open position with asset
             if self.check_position(fastFalse=True):
                 lg.info(
-                    "There is already and open position with that asset! Aborting..."
+                    "There is already an open position with that asset! Aborting..."
                 )
                 return False  # aborting execution
 
@@ -495,6 +527,7 @@ class Trader:
                     lg.info("No general trend found for %s", self.ticker)
                     return False
                 # confirm instant trend matches general trend
+                """
                 if not self.get_instant_trend(trend):
                     lg.info("Instant analysis is not confirming trend, going back")
                     continue
@@ -508,6 +541,7 @@ class Trader:
                 if not self.get_stochastic(trend):
                     lg.info("Stochastic analysis is not confirming trend, going back")
                     continue
+                """
 
                 # all of filters passed
                 lg.info("All filtering passed, make an order")
@@ -523,17 +557,34 @@ class Trader:
             )
             # decide amount to invest
             sharesQuantity = self.get_shares_amount(self.currentPrice)
-            # submit order TODO
-
-            # check position
+            # submit order
+            success = self.submit_order(
+                type="limit",
+                trend=trend,
+                sharesQuantity=sharesQuantity,
+                currentPrice=self.currentPrice,
+            )
+            # check position, see if the order has gone through
             if not self.check_position():
-                # cancel order if it didn't go through TODO
-
+                # cancel order if it didn't go through
+                self.cancel_pending_order()
                 continue
+            pdb.set_trace()
+
             # enter position mode
-            successfulSell = self.enter_position_mode(trend)
+            # successfulSell = self.enter_position_mode(trend)
+            successfulSell = self.enter_position_mode(
+                trend, retryInterval=20, maxAttempts=3
+            )
+            pdb.set_trace()
             while True:
-                # submit order TODO
+                # submit order
+                success = self.submit_order(
+                    type="market",
+                    trend=trend,
+                    sharesQuantity=sharesQuantity,
+                    currentPrice=self.currentPrice,
+                )
 
                 if not self.check_position(True):
                     break

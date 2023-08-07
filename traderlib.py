@@ -527,7 +527,6 @@ class Trader:
                     lg.info("No general trend found for %s", self.ticker)
                     return False
                 # confirm instant trend matches general trend
-                """
                 if not self.get_instant_trend(trend):
                     lg.info("Instant analysis is not confirming trend, going back")
                     continue
@@ -541,7 +540,6 @@ class Trader:
                 if not self.get_stochastic(trend):
                     lg.info("Stochastic analysis is not confirming trend, going back")
                     continue
-                """
 
                 # all of filters passed
                 lg.info("All filtering passed, make an order")
@@ -572,7 +570,6 @@ class Trader:
             pdb.set_trace()
 
             # enter position mode
-            # successfulSell = self.enter_position_mode(trend)
             successfulSell = self.enter_position_mode(
                 trend, retryInterval=20, maxAttempts=3
             )

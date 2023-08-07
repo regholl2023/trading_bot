@@ -279,6 +279,10 @@ class Trader:
             # get 5 min candles from yahoo (~50 samples)
             data = self.load_historical_data_yahoo(interval="5m", period="1d")
             rsi = ti.rsi(data.Close.values, 14)[-1]  # using 14 sample window
+<<<<<<< HEAD
+=======
+            pdb.set_trace()
+>>>>>>> 9c2b575834bd60dcff2620d27919dfdfdfb64013
             lg.info("RSI = %.2f", rsi)
             if trend == "long" and 50 < rsi and rsi < 80:
                 lg.info("Trend confirmed for %s: long", asset)
@@ -487,7 +491,6 @@ class Trader:
             while True:
                 # find general trend
                 trend = self.get_general_trend()
-                """
                 if trend == "none":
                     lg.info("No general trend found for %s", self.ticker)
                     return False
@@ -505,12 +508,10 @@ class Trader:
                 if not self.get_stochastic(trend):
                     lg.info("Stochastic analysis is not confirming trend, going back")
                     continue
-                """
 
                 # all of filters passed
                 lg.info("All filtering passed, make an order")
                 break
-            pdb.set_trace()
             # get current price
             self.currentPrice = round(
                 float(

@@ -1,6 +1,7 @@
 # How to run
 
 > python3 bot.py
+
 NOTE: I've purposely included my API keys in this repo within constants.py so that anyone wanted to test this bot out can do so without creating an Alpaca account. However, if possible, please do create your own Alpaca account use your own Paper Trading API keys. 
 # What it does
 
